@@ -14,6 +14,7 @@ add_executable(shadertool ${SOURCES})
 
 target_link_libraries(shadertool
 	PRIVATE
+		spirv-cross-core
 		spirv-cross-glsl
 		CLI11
 		termcolor
