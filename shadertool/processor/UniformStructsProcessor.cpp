@@ -23,7 +23,8 @@ std::string getBaseCppType(const spirv_cross::SPIRType& type)
 {
 	switch (type.basetype) {
 	case spirv_cross::SPIRType::Boolean:
-		return "bool";
+		// Output booleans as uints to ensure the size is consistent across systems/compilers
+		return "std::uint32_t";
 	case spirv_cross::SPIRType::SByte:
 		return "std::int8_t";
 	case spirv_cross::SPIRType::UByte:
