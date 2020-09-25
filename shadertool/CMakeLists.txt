@@ -30,4 +30,6 @@ target_compile_options(shadertool PRIVATE
 		/W4>
 )
 
+target_compile_definitions(shadertool PRIVATE NOMINMAX)
+
 install(TARGETS shadertool DESTINATION bin)
