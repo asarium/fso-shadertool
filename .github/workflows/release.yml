@@ -1,0 +1,123 @@
+
+name: Build a release
+on:
+    push:
+        tags:
+            - 'v*'
+
+jobs:
+    build_linux:
+        name: Linux
+        runs-on: ubuntu-20.04
+        steps:
+        - name: Prepare Environment
+          working-directory: /tmp
+          run: |
+              sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+              sudo apt-get -yq update
+              sudo apt-get -yq install cmake ninja-build g++-10
+        - uses: actions/checkout@v1
+          name: Checkout
+          with:
+              submodules: true
+        - name: Configure CMake
+          run: |
+              export CC=gcc-10
+              export CXX=g++-10
+              CXXFLAGS="-m64 -mtune=generic -mfpmath=sse -msse -msse2 -pipe"
+              CFLAGS="-m64 -mtune=generic -mfpmath=sse -msse -msse2 -pipe"
+              mkdir build
+              cd build
+              export CXXFLAGS
+              export CFLAGS
+              cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/tmp/install ..
+        - name: Compile
+          working-directory: ./build
+          run: ninja -k 20 all
+        - name: Install
+          working-directory: ./build
+          run: ninja install
+        - name: Create Package
+          working-directory: /tmp/install
+          run: tar -zcvf /tmp/shadertool-linux.tar.gz *
+        - name: Upload package
+          uses: actions/upload-artifact@v2
+          with:
+              name: linux-archive
+              path: /tmp/shadertool-linux.tar.gz
+    build_windows:
+        name: Windows
+        runs-on: windows-2019
+        steps:
+        -   uses: actions/checkout@v1
+            name: Checkout
+            with:
+                submodules: true
+        - name: Configure CMake
+          shell: bash
+          run: |
+              mkdir build
+              cd build
+              cmake -DCMAKE_INSTALL_PREFIX=C:/install -G "Visual Studio 16 2019" -T "v142" -A "Win32" ..
+        - name: Compile
+          working-directory: ./build
+          shell: bash
+          run: cmake --build . --config Release -- /verbosity:minimal
+        - name: Install
+          working-directory: ./build
+          run: cmake --build . --target install --config Release -- /verbosity:minimal
+        - name: Create Package
+          working-directory: C:/install
+          shell: bash
+          run: tar --force-local -zcvf 'C:\shadertool-windows.tar.gz' *
+        - name: Upload package
+          uses: actions/upload-artifact@v2
+          with:
+              name: windows-archive
+              path: C:/shadertool-windows.tar.gz
+
+    create_release:
+        name: Create release and upload
+        runs-on: ubuntu-20.04
+        needs:
+        - build_linux
+        - build_windows
+        steps:
+        - name: Create release
+          id: create_release
+          uses: actions/create-release@v1
+          env:
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+          with:
+              tag_name: ${{ github.ref }}
+              release_name: Release ${{ github.ref }}
+              draft: false
+              prerelease: false
+
+        - name: Download Linux builds
+          uses: actions/download-artifact@v2
+          with:
+              name: linux-archive
+        - name: Upload Linux release Asset
+          uses: actions/upload-release-asset@v1
+          env:
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          with:
+              upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+              asset_path: ./shadertool-linux.tar.gz
+              asset_name: shadertool-linux.tar.gz
+              asset_content_type: application/gzip
+
+        - name: Download Windows builds
+          uses: actions/download-artifact@v2
+          with:
+              name: windows-archive
+        - name: Upload Windows release Asset
+          uses: actions/upload-release-asset@v1
+          env:
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          with:
+              upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+              asset_path: ./shadertool-windows.tar.gz
+              asset_name: shadertool-windows.tar.gz
+              asset_content_type: application/gzip

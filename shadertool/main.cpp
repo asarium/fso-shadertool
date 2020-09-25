@@ -19,8 +19,8 @@ std::vector<uint32_t> load_spirv_file(const std::filesystem::path& path)
 	in.seekg(0, std::ios::beg);
 
 	std::vector<uint32_t> output;
-	output.resize(fsize / 4);
-	in.read(reinterpret_cast<char*>(output.data()), fsize);
+	output.resize(static_cast<size_t>(fsize / 4));
+	in.read(reinterpret_cast<char*>(output.data()), static_cast<size_t>(fsize));
 
 	return output;
 }
