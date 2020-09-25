@@ -10,7 +10,6 @@ std::string Preamble = R"(
 #pragma once
 
 #include <cstdint>
-#include <array>
 
 )";
 
