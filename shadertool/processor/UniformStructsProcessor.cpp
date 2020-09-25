@@ -143,6 +143,11 @@ bool UniformStructsProcessor::processShader(const std::filesystem::path& shaderP
 	auto resources = compiler.get_shader_resources();
 	auto ubos = resources.uniform_buffers;
 
+	if (ubos.empty()) {
+		// No need to output anything if there are no ubos
+		return true;
+	}
+
 	buffer << Preamble;
 
 	for (const auto& ubo : ubos) {
