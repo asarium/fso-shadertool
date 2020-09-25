@@ -1,0 +1,93 @@
+
+name: Build a release
+
+on: push
+
+jobs:
+    build_linux:
+        name: Linux
+        runs-on: ubuntu-20.04
+        steps:
+        - name: Prepare Environment
+          working-directory: /tmp
+          run: |
+              sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+              sudo apt-get -yq update
+              sudo apt-get -yq install cmake ninja-build g++-10
+        - uses: actions/checkout@v1
+          name: Checkout
+          with:
+              submodules: true
+        - name: Configure CMake
+          run: |
+              export CC=gcc-10
+              export CXX=g++-10
+              CXXFLAGS="-m64 -mtune=generic -mfpmath=sse -msse -msse2 -pipe"
+              CFLAGS="-m64 -mtune=generic -mfpmath=sse -msse -msse2 -pipe"
+              mkdir build
+              cd build
+              export CXXFLAGS
+              export CFLAGS
+              cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/tmp/install ..
+        - name: Compile
+          working-directory: ./build
+          run: ninja -k 20 all
+        - name: Install
+          working-directory: ./build
+          run: ninja install
+        - name: Create Package
+          working-directory: /tmp/install
+          run: tar -zcvf /tmp/shadertool.tar.gz *
+        - name: Upload package
+          uses: actions/upload-artifact@v2
+          with:
+              name: linux-archive
+              path: /tmp/shadertool.tar.gz
+    build_windows:
+        name: Windows
+        runs-on: windows-2019
+        steps:
+        -   uses: actions/checkout@v1
+            name: Checkout
+            with:
+                submodules: true
+        - name: Configure CMake
+          shell: bash
+          run: |
+              mkdir build
+              cd build
+              cmake -DCMAKE_INSTALL_PREFIX=C:/install -G "Visual Studio 16 2019" -T "v142" -A "Win32" ..
+        - name: Compile
+          working-directory: ./build
+          shell: bash
+          run: cmake --build . --config Release -- /verbosity:minimal
+        - name: Install
+          working-directory: ./build
+          run: cmake --build . --target install --config Release -- /verbosity:minimal
+        - name: Create Package
+          working-directory: C:/install
+          shell: bash
+          run: tar --force-local -zcvf 'C:\shadertool.tar.gz' *
+        - name: Upload package
+          uses: actions/upload-artifact@v2
+          with:
+              name: windows-archive
+              path: C:/shadertool.tar.gz
+
+    create_release:
+        name: Create release and upload
+        runs-on: ubuntu-20.04
+        needs:
+        - build_linux
+        - build_windows
+        steps:
+        - name: Download Linux builds
+          uses: actions/download-artifact@v2
+          with:
+              name: linux-archive
+        - name: Download Windows builds
+          uses: actions/download-artifact@v2
+          with:
+              name: windows-archive
+        - name: Create release
+          run: ls -al
