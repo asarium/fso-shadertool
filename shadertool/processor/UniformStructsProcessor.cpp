@@ -6,6 +6,14 @@
 namespace shadertool {
 
 namespace {
+std::string Preamble = R"(
+#pragma once
+
+#include <cstdint>
+#include <array>
+
+)";
+
 std::string makeCppIdentifier(const std::string& name)
 {
 	auto replace = [](char c) {
@@ -49,30 +57,34 @@ std::string getBaseCppType(const spirv_cross::SPIRType& type)
 		throw std::runtime_error("Unsupported type in uniform buffer.");
 	}
 }
-std::string getCppArraySpecifier(const spirv_cross::SPIRType& type)
+std::string getCppType(const spirv_cross::SPIRType& type)
 {
+	auto basicType = getBaseCppType(type);
+
 	if (type.vecsize == 1 && type.columns == 1) {
-		// Basic type, nothing needed here
-		return std::string();
+		// Basic type, nothing special here
+		return basicType;
 	}
 
-	if (type.vecsize > 1 && type.columns == 1) {
-		// Simple array type
-		return "[" + std::to_string(type.vecsize) + "]";
-	}
+	switch (type.basetype) {
+	case spirv_cross::SPIRType::Float:
+		if (type.vecsize > 1 && type.columns == 1) {
+			// Simple array type
+			return "SPIRV_FLOAT_VEC" + std::to_string(type.vecsize);
+		}
 
-	return "[" + std::to_string(type.vecsize) + "][" + std::to_string(type.columns) + "]";
+		return "SPIRV_FLOAT_MAT_" + std::to_string(type.vecsize) + "x" + std::to_string(type.columns);
+	default:
+		throw std::runtime_error("Unsupported vector or matrix type.");
+	}
 }
 std::string getStructTypeName(const std::string& uboName, const std::filesystem::path& filePath)
 {
-	if (uboName == "genericData") {
-		auto filename = filePath.filename();
-		// Remove one level to remove the .spv extension
-		filename.replace_extension();
+	auto filename = filePath.filename();
+	// Remove one level to remove the .spv extension
+	filename.replace_extension();
 
-		return uboName + "_" + makeCppIdentifier(filename.u8string());
-	}
-	return uboName;
+	return uboName + "_" + makeCppIdentifier(filename.u8string());
 }
 uint64_t getMemberCppSize(const spirv_cross::SPIRType& type)
 {
@@ -132,12 +144,11 @@ bool UniformStructsProcessor::processShader(const std::filesystem::path& shaderP
 	auto resources = compiler.get_shader_resources();
 	auto ubos = resources.uniform_buffers;
 
-	buffer << "#pragma once\n";
-	buffer << "#include <cstdint>\n";
+	buffer << Preamble;
 
 	for (const auto& ubo : ubos) {
 		auto cppTypeName = getStructTypeName(ubo.name, shaderPath);
-		buffer << "struct " << cppTypeName << "{\n";
+		buffer << "struct " << cppTypeName << " {\n";
 
 		auto type = compiler.get_type(ubo.base_type_id);
 
@@ -159,7 +170,7 @@ bool UniformStructsProcessor::processShader(const std::filesystem::path& shaderP
 				currentCppOffset = memberOffset;
 			}
 
-			buffer << "\t" << getBaseCppType(membertype) << " " << name << getCppArraySpecifier(membertype) << ";\n";
+			buffer << "\t" << getCppType(membertype) << " " << name << ";\n";
 
 			currentCppOffset += getMemberCppSize(membertype);
 			memberOffsets.emplace_back(name, memberOffset);
@@ -180,8 +191,6 @@ bool UniformStructsProcessor::processShader(const std::filesystem::path& shaderP
 				   << name << " does not match the uniform buffer offset!\");\n";
 		}
 	}
-
-	std::cout << buffer.str();
 
 	std::ofstream out(m_outputPath, std::ios::binary | std::ios::trunc);
 	if (!out.good()) {
